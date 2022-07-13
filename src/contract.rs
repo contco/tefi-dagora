@@ -5,10 +5,10 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{State, STATE};
+use crate::state::{Thread, THREAD };
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:tefi-dagora";
+const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -18,17 +18,19 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    let state = State {
-        count: msg.count,
-        owner: info.sender.clone(),
+    let thread = Thread {
+        title: msg.title,
+        msg: msg.msg,
+        author: info.sender.clone(),
     };
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    STATE.save(deps.storage, &state)?;
+    THREAD.save(deps.storage, &thread)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
-        .add_attribute("owner", info.sender)
-        .add_attribute("count", msg.count.to_string()))
+        .add_attribute("author", info.sender)
+        .add_attribute("title", msg.title)
+        .add_attribute("message", msg.msg))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -86,7 +88,7 @@ mod tests {
     fn proper_initialization() {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
-        let msg = InstantiateMsg { count: 17 };
+        let msg = InstantiateMsg { title: String::from("Hello World")  ,msg: String::from("Hello New Message") };
         let info = mock_info("creator", &coins(1000, "earth"));
 
         // we can just call .unwrap() to assert this was a success

@@ -3,8 +3,8 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use my_first_contract::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use my_first_contract::state::State;
+use tefi_dagora::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use tefi_dagora::state::State;
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

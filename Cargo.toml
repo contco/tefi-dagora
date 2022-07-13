@@ -1,5 +1,5 @@
 [package]
-name = "tefi-dagora"
+name = "tefi_dagora"
 version = "0.1.0"
 authors = ["Fahad-Mahmood <fahad@contco.com>"]
 edition = "2018"
