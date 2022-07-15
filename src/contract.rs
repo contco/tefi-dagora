@@ -4,7 +4,7 @@ use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{QueryMsgResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Thread, THREAD, REPLY_COUNTER, Reply, REPLIES};
 
 // version info for migration info
@@ -19,17 +19,18 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     let thread = Thread {
-        title: msg.title,
-        msg: msg.msg,
+        title: String::from(&msg.title),
+        msg: String::from(&msg.msg),
         author: info.sender.clone(),
     };
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     THREAD.save(deps.storage, &thread)?;
+    REPLY_COUNTER.save(deps.storage, &0)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("author", info.sender)
-        .add_attribute("title", msg.title)
+        .add_attribute("title",  msg.title)
         .add_attribute("message", msg.msg))
 }
 
@@ -51,14 +52,14 @@ pub fn update_message(deps: DepsMut, info: MessageInfo, msg: String) -> Result<R
         if info.sender != state.author {
            return Err(ContractError::Unauthorized {});
         }
-        state.msg = msg;
+        state.msg = String::from(&msg);
         Ok(state)
     })?;
     Ok(
         Response::new()
         .add_attribute("method", "update_message")
         .add_attribute("author", info.sender)
-        .add_attribute("message", msg)
+        .add_attribute("message",  msg)
     )
 }
 
@@ -72,10 +73,10 @@ pub fn next_reply_counter(store: &mut dyn Storage) -> StdResult<u64> {
 pub fn add_reply(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Response, ContractError> {
     let id = next_reply_counter(deps.storage)?;
     let reply = Reply {
-        msg,
+        msg: String::from(&msg),
         author: info.sender.clone(),
     };
-    REPLIES.save(deps.storage, id, &reply);
+    REPLIES.save(deps.storage, id, &reply)?;
     Ok(
         Response::new()
         .add_attribute("method", "add_reply")
@@ -87,13 +88,14 @@ pub fn add_reply(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Respon
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetCount {} => to_binary(&query_count(deps)?),
+        QueryMsg::GetMessage {} => to_binary(&query_message(deps)?),
     }
 }
 
-fn query_count(deps: Deps) -> StdResult<CountResponse> {
-    let state = STATE.load(deps.storage)?;
-    Ok(CountResponse { count: state.count })
+fn query_message(deps: Deps) -> StdResult<QueryMsgResponse> {
+    let message_state = THREAD.load(deps.storage)?;
+    let total_replies = REPLY_COUNTER.load(deps.storage)?;
+    Ok(QueryMsgResponse { title: message_state.title, msg: message_state.msg, author: message_state.author, total_replies})
 }
 
 #[cfg(test)]
@@ -114,11 +116,14 @@ mod tests {
         assert_eq!(0, res.messages.len());
 
         // it worked, let's query the state
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(17, value.count);
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetMessage {}).unwrap();
+        let value: QueryMsgResponse = from_binary(&res).unwrap();
+        assert_eq!("Hello World", value.title);
+        assert_eq!("Hello New Message", value.msg);
+        assert_eq!("creator", value.author);
+        assert_eq!(0, value.total_replies);
     }
-
+/* 
     #[test]
     fn increment() {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
@@ -164,5 +169,5 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
         let value: CountResponse = from_binary(&res).unwrap();
         assert_eq!(5, value.count);
-    }
+    }*/
 }
