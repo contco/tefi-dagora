@@ -3,12 +3,15 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "count"
+    "msg",
+    "title"
   ],
   "properties": {
-    "count": {
-      "type": "integer",
-      "format": "int32"
+    "msg": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
     }
   }
 }

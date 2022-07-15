@@ -1,18 +1,27 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "State",
+  "title": "QueryMsgResponse",
   "type": "object",
   "required": [
-    "count",
-    "owner"
+    "author",
+    "msg",
+    "title",
+    "total_replies"
   ],
   "properties": {
-    "count": {
-      "type": "integer",
-      "format": "int32"
-    },
-    "owner": {
+    "author": {
       "$ref": "#/definitions/Addr"
+    },
+    "msg": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "total_replies": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "definitions": {
