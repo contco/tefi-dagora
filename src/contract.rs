@@ -1,11 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Thread, THREAD };
+use crate::state::{Thread, THREAD, REPLY_COUNTER, Reply, REPLIES};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
@@ -41,29 +41,47 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Increment {} => try_increment(deps),
-        ExecuteMsg::Reset { count } => try_reset(deps, info, count),
+        ExecuteMsg::UpdateMessage { msg } => update_message(deps, info, msg),
+        ExecuteMsg::AddReply { msg } => add_reply(deps, info, msg),
     }
 }
 
-pub fn try_increment(deps: DepsMut) -> Result<Response, ContractError> {
-    STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
-        state.count += 1;
+pub fn update_message(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Response, ContractError> {
+    THREAD.update(deps.storage, |mut state| -> Result<_, ContractError> {
+        if info.sender != state.author {
+           return Err(ContractError::Unauthorized {});
+        }
+        state.msg = msg;
         Ok(state)
     })?;
-
-    Ok(Response::new().add_attribute("method", "try_increment"))
+    Ok(
+        Response::new()
+        .add_attribute("method", "update_message")
+        .add_attribute("author", info.sender)
+        .add_attribute("message", msg)
+    )
 }
 
-pub fn try_reset(deps: DepsMut, info: MessageInfo, count: i32) -> Result<Response, ContractError> {
-    STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
-        if info.sender != state.owner {
-            return Err(ContractError::Unauthorized {});
-        }
-        state.count = count;
-        Ok(state)
-    })?;
-    Ok(Response::new().add_attribute("method", "reset"))
+
+pub fn next_reply_counter(store: &mut dyn Storage) -> StdResult<u64> {
+    let id: u64 = REPLY_COUNTER.may_load(store)?.unwrap_or_default() + 1;
+    REPLY_COUNTER.save(store, &id)?;
+    Ok(id)
+}
+
+pub fn add_reply(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Response, ContractError> {
+    let id = next_reply_counter(deps.storage)?;
+    let reply = Reply {
+        msg,
+        author: info.sender.clone(),
+    };
+    REPLIES.save(deps.storage, id, &reply);
+    Ok(
+        Response::new()
+        .add_attribute("method", "add_reply")
+        .add_attribute("author", info.sender)
+        .add_attribute("message", msg)
+    )
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

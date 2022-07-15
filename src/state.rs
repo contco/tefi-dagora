@@ -9,11 +9,12 @@ pub struct Thread {
     pub msg: String,
     pub author: Addr
 }
-
-pub struct ReplyPost {
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Reply {
     pub msg: String,
     pub author: Addr,
 }
 
 pub const THREAD: Item<Thread> = Item::new("thread");
-pub const REPLIES: Map<&str, ReplyPost> = Map::new("replies");
+pub const REPLY_COUNTER: Item<u64> = Item::new("reply_counter");
+pub const REPLIES: Map<u64, Reply> = Map::new("replies");
