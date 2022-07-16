@@ -123,51 +123,48 @@ mod tests {
         assert_eq!("creator", value.author);
         assert_eq!(0, value.total_replies);
     }
-/* 
-    #[test]
-    fn increment() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
 
-        let msg = InstantiateMsg { count: 17 };
+    #[test]
+    fn update_message() {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg { title: String::from("Hello World")  ,msg: String::from("Hello New Message") };
         let info = mock_info("creator", &coins(2, "token"));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // beneficiary can release it
-        let info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Increment {};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-        // should increase counter by 1
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(18, value.count);
-    }
-
-    #[test]
-    fn reset() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-
-        let msg = InstantiateMsg { count: 17 };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-        // beneficiary can release it
+        // Should return error for unauthorized users
         let unauth_info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Reset { count: 5 };
+        let msg = ExecuteMsg::UpdateMessage { msg: String::from("Message is Updated!") };
         let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
         match res {
             Err(ContractError::Unauthorized {}) => {}
             _ => panic!("Must return unauthorized error"),
         }
 
-        // only the original creator can reset the counter
-        let auth_info = mock_info("creator", &coins(2, "token"));
-        let msg = ExecuteMsg::Reset { count: 5 };
-        let _res = execute(deps.as_mut(), mock_env(), auth_info, msg).unwrap();
+        //Update only for authorized user
+        let info = mock_info("creator", &coins(2, "token"));
+        let msg = ExecuteMsg::UpdateMessage {msg: String::from("Message is Updated!")};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // should now be 5
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(5, value.count);
-    }*/
+        // new message value should be updated
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetMessage {}).unwrap();
+        let value: QueryMsgResponse = from_binary(&res).unwrap();
+        assert_eq!("Message is Updated!", value.msg);
+    }
+    #[test]
+    fn add_reply() {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg { title: String::from("Hello World")  ,msg: String::from("Hello New Message") };
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // anyone can send a reply
+        let info = mock_info("anyone", &coins(2, "token"));
+        let msg = ExecuteMsg::AddReply {msg: String::from("This thread is awesome!")};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // reply count should increase by 1
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetMessage {}).unwrap();
+        let value: QueryMsgResponse = from_binary(&res).unwrap();
+        assert_eq!(1, value.total_replies);
+    }
 }
