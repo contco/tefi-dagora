@@ -17,7 +17,8 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     GetThreadById {id: u64},
-    GetThreadsByCategory {category: String, offset: Option<u64>, limit: Option<u32>}
+    GetThreadsByCategory {category: String, offset: Option<u64>, limit: Option<u32>},
+    GetThreadsByAuthor {author: Addr, offset: Option<u64>, limit: Option<u32>}
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetThreadByIdResponse {
