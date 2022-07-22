@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use tefi_dagora::msg::{QueryMsgResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use tefi_dagora::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg};
 use tefi_dagora::state::{Thread, Reply};
 
 fn main() {
@@ -17,5 +17,4 @@ fn main() {
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(Thread), &out_dir);
     export_schema(&schema_for!(Reply), &out_dir);
-    export_schema(&schema_for!(QueryMsgResponse), &out_dir);
 }

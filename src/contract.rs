@@ -4,8 +4,8 @@ use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, QueryReplyResponse, GetThreadByIdResponse};
-use crate::state::{Thread, ADMIN, THREAD, REPLY_COUNTER, threads, THREAD_COUNTER, next_thread_counter, Reply, REPLIES};
+use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse};
+use crate::state::{ ADMIN, REPLY_COUNTER, THREAD_COUNTER, Thread, threads, next_thread_counter, Reply, REPLIES};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
@@ -39,7 +39,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::CreateThread {title, content, category} => create_thread(deps, info, title, content, category),
-        ExecuteMsg::UpdateThreadContent { msg, id: u64 } => update_message(deps, info, msg),
+        ExecuteMsg::UpdateThreadContent { id, content } => update_thread_content(deps, info, id, content),
     }
 }
 
@@ -62,19 +62,28 @@ let thread_id = next_thread_counter(deps.storage)?;
     
 }
 
-pub fn update_message(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Response, ContractError> {
-    THREAD.update(deps.storage, |mut state| -> Result<_, ContractError> {
-        if info.sender != state.author {
-           return Err(ContractError::Unauthorized {});
-        }
-        state.content = String::from(&msg);
-        Ok(state)
+pub fn update_thread_content(deps: DepsMut, info: MessageInfo, id: u64, content: String) -> Result<Response, ContractError> {
+    threads().update(deps.storage, &id.to_be_bytes(), |old| match old {
+        Some(Thread { id, title, author, category, ..}) => {
+            if info.sender != author {
+                return Err(ContractError::Unauthorized { });
+            }
+           let updated_thread = Thread {
+            id,
+            title,
+            content: content.clone(),
+            author,
+            category
+           };
+           Ok(updated_thread)
+        } ,
+        None => Err(ContractError::ThreadNotExists {}),
     })?;
     Ok(
         Response::new()
-        .add_attribute("method", "update_message")
+        .add_attribute("method", "update_thread_content")
         .add_attribute("author", info.sender)
-        .add_attribute("message",  msg)
+        .add_attribute("content", content),
     )
 }
 
@@ -104,7 +113,7 @@ pub fn add_reply(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Respon
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetThreadById { id } => to_binary(&query_thread_by_id(deps, id)?),
-        QueryMsg::GetReply { key } => to_binary(&query_reply_by_key(deps, key)?),
+       // QueryMsg::GetReply { key } => to_binary(&query_reply_by_key(deps, key)?),
         //QueryMsg::GetReplies { offset, limit } => to_binary(&query_replies(deps, offset, limit)?),
     }
 }
@@ -113,12 +122,6 @@ fn query_thread_by_id(deps: Deps, id: u64) -> StdResult<GetThreadByIdResponse> {
     let thread = threads().load(deps.storage, &id.to_be_bytes().to_vec())?;
     Ok(GetThreadByIdResponse { id:thread.id, title: thread.title, content: thread.content, author: thread.author, category: thread.category})
 }
-
-fn query_reply_by_key(deps: Deps, key: u64) -> StdResult<QueryReplyResponse> {
-    let reply  = REPLIES.load(deps.storage, &key.to_be_bytes())?;
-    Ok(QueryReplyResponse {msg: reply.msg, author: reply.author })
-
-} 
 
 /*fn query_replies(deps: Deps, offset: Option<u64>, limit: Option<u64>) -> StdResult<u64> {
     let mut min_key: u64;
@@ -171,6 +174,44 @@ mod tests {
         assert_eq!(title, value.title);
         assert_eq!(content, value.content);
         assert_eq!(category, value.category);
+
+    }
+    #[test]
+    fn update_thread_content() {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg { };
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let info = mock_info("creator", &coins(2, "token"));
+        let title = String::from("First Thread");
+        let content = String::from("First Message");
+        let category = String::from("General");
+        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg);
+
+
+        let updated_content = String::from("Updated Content!");
+
+        // Should return error if not executed by thread author
+        let info = mock_info("anyone", &coins(2, "token"));
+        let msg = ExecuteMsg::UpdateThreadContent { id: 1, content: updated_content.clone()};
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        
+        match res {
+            Err(ContractError::Unauthorized {}) => {}
+            _ => panic!("Must return unauthorized error"),
+        }
+
+        // Should update content for author
+        let info = mock_info("creator", &coins(2, "token"));
+        let msg = ExecuteMsg::UpdateThreadContent { id: 1, content: updated_content.clone()};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg);
+
+         // Verify content is updated
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadById {id: 1}).unwrap();
+        let value: GetThreadByIdResponse = from_binary(&res).unwrap();
+        assert_eq!(updated_content, value.content);
 
     }
 }

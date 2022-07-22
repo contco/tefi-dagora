@@ -17,9 +17,9 @@ pub struct Reply {
     pub author: Addr,
 }
 
-pub const THREAD: Item<Thread> = Item::new("thread");
 pub const REPLY_COUNTER: Item<u64> = Item::new("reply_counter");
 pub const REPLIES: Map<&[u8], Reply> = Map::new("replies");
+
 pub const ADMIN: Item<Addr> = Item::new("ADMIN");
 pub const THREAD_COUNTER: Item<u64> = Item::new("THREAD_COUNTER");
 

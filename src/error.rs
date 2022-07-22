@@ -8,6 +8,10 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+    #[error("ThreadExists")]
+    ThreadExists {},
+    #[error("ThreadNotExists")]
+    ThreadNotExists {},
 
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },
