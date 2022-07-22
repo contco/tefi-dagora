@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::Addr;
+
+use crate::state::Thread;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {}
 
@@ -15,6 +17,7 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     GetThreadById {id: u64},
+    GetThreadsByCategory {category: String, offset: Option<u64>, limit: Option<u32>}
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetThreadByIdResponse {
@@ -23,4 +26,9 @@ pub struct GetThreadByIdResponse {
     pub content: String,
     pub category: String,
     pub author: Addr
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ThreadsResponse {
+    pub entries: Vec<Thread>,
 }
