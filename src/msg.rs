@@ -11,7 +11,8 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     CreateThread {title: String, content: String, category: String},
     UpdateThreadContent {id: u64, content: String},
-    AddComment {thread_id: u64, comment: String }
+    AddComment {thread_id: u64, comment: String },
+    UpdateComment {comment_id: u64, comment: String},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

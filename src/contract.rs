@@ -42,6 +42,7 @@ pub fn execute(
         ExecuteMsg::CreateThread {title, content, category} => create_thread(deps, info, title, content, category),
         ExecuteMsg::UpdateThreadContent { id, content } => update_thread_content(deps, info, id, content),
         ExecuteMsg::AddComment { thread_id, comment } => add_comment(deps, info, thread_id, comment),
+        ExecuteMsg::UpdateComment { comment_id, comment } => update_comment(deps, info, comment_id, comment),
     }
 }
 
@@ -111,6 +112,28 @@ pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: St
     }
 }
 
+pub fn update_comment(deps: DepsMut, info: MessageInfo, comment_id: u64, comment: String) -> Result<Response, ContractError> {  
+    comments().update(deps.storage, &comment_id.to_be_bytes(), |old| match old {
+     None => Err(ContractError::CommentNotExists { }),
+     Some(old_comment) => {
+        if info.sender != old_comment.author {
+           return Err(ContractError::Unauthorized {  });
+        }
+        let updated_comment = Comment {
+            comment: comment.clone(),
+            ..old_comment
+        };
+        Ok(updated_comment)
+     }
+    })?;
+    Ok(
+        Response::new()
+        .add_attribute("method", "update_comment")
+        .add_attribute("author", info.sender)
+        .add_attribute("new_comment", comment)
+    )
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -176,27 +199,39 @@ mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info, MockQuerier, MockApi};
     use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage};
+
+    fn instantiate_contract() -> OwnedDeps<MemoryStorage, MockApi, MockQuerier> {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg { };
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        return deps;
+    }
+
+    fn create_new_thread(deps: DepsMut) {
+        let info = mock_info("anyone", &coins(2, "token"));
+        let title = String::from("First Thread");
+        let content = String::from("First Message");
+        let category = String::from("General");
+        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
+        let _res = execute(deps, mock_env(), info, msg);
+    }
+
     #[test]
     fn create_thread() {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
         let msg = InstantiateMsg { };
         let info = mock_info("creator", &coins(2, "token"));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-        let info = mock_info("anyone", &coins(2, "token"));
-        let title = String::from("First Thread");
-        let content = String::from("First Message");
-        let category = String::from("General");
-        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg);
+        create_new_thread(deps.as_mut());
 
          // We should query thread response using id
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadById {id: 1}).unwrap();
         let value: GetThreadByIdResponse = from_binary(&res).unwrap();
         assert_eq!(1, value.id);
-        assert_eq!(title, value.title);
-        assert_eq!(content, value.content);
-        assert_eq!(category, value.category);
+        assert_eq!(String::from("First Thread"), value.title);
+        assert_eq!(String::from("First Message"), value.content);
+        assert_eq!(String::from("General"), value.category);
 
     }
     #[test]
@@ -238,14 +273,6 @@ mod tests {
 
     }
 
-    fn instantiate_contract() -> OwnedDeps<MemoryStorage, MockApi, MockQuerier> {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-        return deps;
-    }
-
     #[test]
     fn add_comment() {
         let mut deps = instantiate_contract();
@@ -275,6 +302,37 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCommentById {id: 1}).unwrap();
         let value: Comment = from_binary(&res).unwrap();
         assert_eq!(1, value.thread_id);
+
+    }
+
+    #[test]
+    fn update_comment() {
+        let mut deps = instantiate_contract();
+        create_new_thread(deps.as_mut());
+
+        // Create A Comment
+        let auth_info = mock_info("creator", &coins(2, "token"));
+        let msg = ExecuteMsg::AddComment { thread_id: 1, comment: String::from("New Comment")};
+        let _res = execute(deps.as_mut(), mock_env(), auth_info.clone(), msg);
+
+        let update_comment_msg = ExecuteMsg::UpdateComment { comment_id: 1, comment: String::from("Updated Comment")};
+       
+        // Update Without Authorized User
+        let un_auth_info = mock_info("anon", &coins(2, "token"));
+        let res = execute(deps.as_mut(), mock_env(), un_auth_info.clone(), update_comment_msg.clone());
+
+        match res {
+            Err(ContractError::Unauthorized {}) => {}
+            _ => panic!("Must return unauthorized error"),
+        }
+
+        // Update With Authorized User
+        let _res = execute(deps.as_mut(), mock_env(), auth_info.clone(), update_comment_msg);
+
+        // Verify Updated Comment
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCommentById {id: 1}).unwrap();
+        let value: Comment = from_binary(&res).unwrap();
+        assert_eq!(String::from("Updated Comment"), value.comment);
 
     }
 
