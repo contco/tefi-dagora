@@ -1,12 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage, Order, Addr};
+use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Order, Addr};
 use cw2::set_contract_version;
-use cw_storage_plus::{Bound};
+use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
 use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse};
-use crate::state::{ ADMIN, REPLY_COUNTER, THREAD_COUNTER, Thread, threads, next_thread_counter, Reply, REPLIES};
+use crate::state::{ ADMIN, THREAD_COUNTER, Thread, threads, next_thread_counter, COMMENT_COUNTER, Comment, comments, next_comment_counter };
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
@@ -21,7 +21,7 @@ pub fn instantiate(
     _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     ADMIN.save(deps.storage, &info.sender.clone())?;
-    REPLY_COUNTER.save(deps.storage, &0)?;
+    COMMENT_COUNTER.save(deps.storage, &0)?;
     THREAD_COUNTER.save(deps.storage, &0)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
@@ -41,6 +41,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::CreateThread {title, content, category} => create_thread(deps, info, title, content, category),
         ExecuteMsg::UpdateThreadContent { id, content } => update_thread_content(deps, info, id, content),
+        ExecuteMsg::AddComment { thread_id, comment } => add_comment(deps, info, thread_id, comment),
     }
 }
 
@@ -88,26 +89,26 @@ pub fn update_thread_content(deps: DepsMut, info: MessageInfo, id: u64, content:
     )
 }
 
-
-pub fn next_reply_counter(store: &mut dyn Storage) -> StdResult<u64> {
-    let id: u64 = REPLY_COUNTER.may_load(store)?.unwrap_or_default() + 1;
-    REPLY_COUNTER.save(store, &id)?;
-    Ok(id)
-}
-
-pub fn add_reply(deps: DepsMut, info: MessageInfo, msg: String) -> Result<Response, ContractError> {
-    let id = next_reply_counter(deps.storage)?;
-    let reply = Reply {
-        msg: String::from(&msg),
-        author: info.sender.clone(),
-    };
-    REPLIES.save(deps.storage, &id.to_be_bytes(), &reply)?;
-    Ok(
-        Response::new()
-        .add_attribute("method", "add_reply")
-        .add_attribute("author", info.sender)
-        .add_attribute("message", msg)
-    )
+pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: String) -> Result<Response, ContractError> {
+    let load_thread = threads().load(deps.storage, &thread_id.to_be_bytes().to_vec());
+    match load_thread {
+        Ok(_thread)=> {
+            let comment_id = next_comment_counter(deps.storage)?;
+            let new_comment = Comment {
+                comment: comment.clone(),
+                thread_id,
+                author: info.sender.clone(),
+            };
+            comments().save(deps.storage, &comment_id.to_be_bytes().to_vec(), &new_comment)?;
+            Ok(
+                Response::new()
+                .add_attribute("method", "add_comment")
+                .add_attribute("author", info.sender)
+                .add_attribute("comment", comment)
+            )
+        },
+        Err(_e) => Err(ContractError::ThreadNotExists {  }),
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -116,6 +117,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetThreadById { id } => to_binary(&query_thread_by_id(deps, id)?),
         QueryMsg::GetThreadsByCategory {category, offset, limit} => to_binary(&query_threads_by_category(deps, category, offset, limit)?),
         QueryMsg::GetThreadsByAuthor { author, offset, limit } =>  to_binary(&query_threads_by_author(deps, author, offset, limit)?),
+        QueryMsg::GetCommentById {id} => to_binary(&query_comment_by_id(deps, id)?),
     }
 }
 
@@ -164,11 +166,16 @@ fn query_threads_by_author(deps: Deps, author: Addr, offset: Option<u64>, limit:
     Ok(result)    
 }
 
+fn query_comment_by_id(deps: Deps, comment_id: u64) -> StdResult<Comment> {
+    let comment = comments().load(deps.storage, &comment_id.to_be_bytes().to_vec())?;
+    Ok(comment)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info, MockQuerier, MockApi};
+    use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage};
     #[test]
     fn create_thread() {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
@@ -228,6 +235,46 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadById {id: 1}).unwrap();
         let value: GetThreadByIdResponse = from_binary(&res).unwrap();
         assert_eq!(updated_content, value.content);
+
+    }
+
+    fn instantiate_contract() -> OwnedDeps<MemoryStorage, MockApi, MockQuerier> {
+        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+        let msg = InstantiateMsg { };
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        return deps;
+    }
+
+    #[test]
+    fn add_comment() {
+        let mut deps = instantiate_contract();
+        let info = mock_info("creator", &coins(2, "token"));
+        let comment = String::from("New Reply");
+        
+        // Add Reply Without Creating Thread
+        let msg = ExecuteMsg::AddComment { thread_id: 1, comment: comment.clone()};
+        let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+        match res {
+            Err(ContractError::ThreadNotExists{}) => {}
+            _ => panic!("Must return thread not exists error"),
+        }
+
+        // Create New Thread
+        let title = String::from("First Thread");
+        let content = String::from("First Message");
+        let category = String::from("General");
+        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
+        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+     
+        // Add Reply After Creating Thread
+        let msg = ExecuteMsg::AddComment { thread_id: 1, comment};
+        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+
+        // Verify Comment is added
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCommentById {id: 1}).unwrap();
+        let value: Comment = from_binary(&res).unwrap();
+        assert_eq!(1, value.thread_id);
 
     }
 

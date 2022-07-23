@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, StdResult, Storage};
-use cw_storage_plus::{Item, Map, MultiIndex, IndexList, Index, IndexedMap};
+use cw_storage_plus::{Item, MultiIndex, IndexList, Index, IndexedMap};
 
 pub const ADMIN: Item<Addr> = Item::new("ADMIN");
 
