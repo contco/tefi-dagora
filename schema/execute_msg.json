@@ -5,16 +5,24 @@
     {
       "type": "object",
       "required": [
-        "update_message"
+        "create_thread"
       ],
       "properties": {
-        "update_message": {
+        "create_thread": {
           "type": "object",
           "required": [
-            "msg"
+            "category",
+            "content",
+            "title"
           ],
           "properties": {
-            "msg": {
+            "category": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "title": {
               "type": "string"
             }
           }
@@ -25,17 +33,75 @@
     {
       "type": "object",
       "required": [
-        "add_reply"
+        "update_thread_content"
       ],
       "properties": {
-        "add_reply": {
+        "update_thread_content": {
           "type": "object",
           "required": [
-            "msg"
+            "content",
+            "id"
           ],
           "properties": {
-            "msg": {
+            "content": {
               "type": "string"
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "add_comment"
+      ],
+      "properties": {
+        "add_comment": {
+          "type": "object",
+          "required": [
+            "comment",
+            "thread_id"
+          ],
+          "properties": {
+            "comment": {
+              "type": "string"
+            },
+            "thread_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "update_comment"
+      ],
+      "properties": {
+        "update_comment": {
+          "type": "object",
+          "required": [
+            "comment",
+            "comment_id"
+          ],
+          "properties": {
+            "comment": {
+              "type": "string"
+            },
+            "comment_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }

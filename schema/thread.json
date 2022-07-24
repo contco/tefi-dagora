@@ -4,15 +4,25 @@
   "type": "object",
   "required": [
     "author",
-    "msg",
+    "category",
+    "content",
+    "id",
     "title"
   ],
   "properties": {
     "author": {
       "$ref": "#/definitions/Addr"
     },
-    "msg": {
+    "category": {
       "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "title": {
       "type": "string"
