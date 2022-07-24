@@ -1,9 +1,10 @@
 # Build results
-/target
+**/*/target
 
 # Cargo+Git helper file (https://github.com/rust-lang/cargo/blob/0.44.1/src/cargo/sources/git/utils.rs#L320-L327)
-.cargo-ok
-
+**/*/.cargo-ok
+**/*/artifacts
+**/*/.cargo
 # Text file backups
 **/*.rs.bk
 
@@ -13,3 +14,8 @@
 # IDEs
 *.iml
 .idea
+
+node_modules
+keys.terrain.js
+package-lock.json
+yarn.lock

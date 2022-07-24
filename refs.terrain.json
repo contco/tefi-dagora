@@ -1,0 +1,10 @@
+{
+  "testnet": {
+    "tefi_dagora": {
+      "codeId": "2355",
+      "contractAddresses": {
+        "default": "terra1rptnyysvx94lp6sq9ckwk6cwfetu3e4ar8e0e4nfw3gh32jl0q8sep2aq4"
+      }
+    }
+  }
+}
