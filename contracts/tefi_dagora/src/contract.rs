@@ -146,9 +146,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
-fn query_thread_by_id(deps: Deps, id: u64) -> StdResult<GetThreadByIdResponse> {
+fn query_thread_by_id(deps: Deps, id: u64) -> StdResult<Thread> {
     let thread = threads().load(deps.storage, &id.to_be_bytes().to_vec())?;
-    Ok(GetThreadByIdResponse { id:thread.id, title: thread.title, content: thread.content, author: thread.author, category: thread.category})
+    Ok(Thread { id:thread.id, title: thread.title, content: thread.content, author: thread.author, category: thread.category})
 }
 
 // Limits for pagination

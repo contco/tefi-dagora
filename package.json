@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "dependencies": {
-    "@terra-money/terrain": "0.4.1"
+    "@terra-money/terrain": "^0.5.8",
+    "@terra-money/wallet-provider": "^3.9.4"
   },
   "workspaces": [
     "frontend"
