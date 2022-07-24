@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
-use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse};
+use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse, CommentsResponse};
 use crate::state::{ ADMIN, THREAD_COUNTER, Thread, threads, next_thread_counter, COMMENT_COUNTER, Comment, comments, next_comment_counter };
 
 // version info for migration info
@@ -96,6 +96,7 @@ pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: St
         Ok(_thread)=> {
             let comment_id = next_comment_counter(deps.storage)?;
             let new_comment = Comment {
+                comment_id,
                 comment: comment.clone(),
                 thread_id,
                 author: info.sender.clone(),
@@ -141,6 +142,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetThreadsByCategory {category, offset, limit} => to_binary(&query_threads_by_category(deps, category, offset, limit)?),
         QueryMsg::GetThreadsByAuthor { author, offset, limit } =>  to_binary(&query_threads_by_author(deps, author, offset, limit)?),
         QueryMsg::GetCommentById {id} => to_binary(&query_comment_by_id(deps, id)?),
+        QueryMsg::GetCommentsByThread { thread_id, offset, limit } => to_binary(&query_comments_by_thread(deps, thread_id, offset, limit)?),
     }
 }
 
@@ -194,6 +196,23 @@ fn query_comment_by_id(deps: Deps, comment_id: u64) -> StdResult<Comment> {
     Ok(comment)
 }
 
+fn query_comments_by_thread(deps: Deps, thread_id: u64, offset: Option<u64>, limit: Option<u32>) -> StdResult<CommentsResponse> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = offset.map(|offset| Bound::exclusive(offset.to_be_bytes().to_vec()));
+
+    let list: StdResult<Vec<_>>  = comments()
+    .idx.thread
+    .prefix(thread_id.to_be_bytes().to_vec())
+    .range(deps.storage, start, None, Order::Descending)
+    .take(limit)
+    .map(|item| item.map(|(_, comment)| comment))
+    .collect();
+    let result = CommentsResponse {
+        entries: list?,
+    };
+    Ok(result)    
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +234,11 @@ mod tests {
         let category = String::from("General");
         let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
         let _res = execute(deps, mock_env(), info, msg);
+    }
+
+    fn create_new_comment(deps: DepsMut, info: MessageInfo) {
+        let msg = ExecuteMsg::AddComment { thread_id: 1, comment: String::from("New Comment")};
+        let _res = execute(deps, mock_env(), info.clone(), msg);
     }
 
     #[test]
@@ -310,10 +334,9 @@ mod tests {
         let mut deps = instantiate_contract();
         create_new_thread(deps.as_mut());
 
-        // Create A Comment
         let auth_info = mock_info("creator", &coins(2, "token"));
-        let msg = ExecuteMsg::AddComment { thread_id: 1, comment: String::from("New Comment")};
-        let _res = execute(deps.as_mut(), mock_env(), auth_info.clone(), msg);
+        // Create A Comment
+        create_new_comment(deps.as_mut(), auth_info.clone());
 
         let update_comment_msg = ExecuteMsg::UpdateComment { comment_id: 1, comment: String::from("Updated Comment")};
        
@@ -389,6 +412,33 @@ mod tests {
         assert_eq!(1, value.entries[0].id);
         assert_eq!(info1.sender, value.entries[0].author);
         assert_eq!(1, value.entries.len());
+
+    }
+    #[test]
+    fn query_comments_by_thread() {
+       let mut deps = instantiate_contract();
+       
+        create_new_thread(deps.as_mut());
+
+        let info1 = mock_info("creator1", &coins(2, "token"));
+        let info2 = mock_info("creator2", &coins(2, "token"));
+
+        // Create Three Comments for Thread ID 1
+        create_new_comment(deps.as_mut(), info1.clone());
+        create_new_comment(deps.as_mut(), info1.clone());
+        create_new_comment(deps.as_mut(), info2.clone());
+
+        // Query Comments With Pagination using Thread Index
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCommentsByThread {thread_id: 1_u64, offset: Some(0_u64), limit: Some(10_u32)}).unwrap();
+        let value: CommentsResponse = from_binary(&res).unwrap();
+
+        // Verify Index Vector for Comments
+        assert_eq!(3, value.entries[0].comment_id);
+        assert_eq!(2, value.entries[1].comment_id);
+        assert_eq!(1, value.entries[2].comment_id);
+        assert_eq!(info2.sender, value.entries[0].author);
+        assert_eq!(info1.sender, value.entries[2].author);
+        assert_eq!(3, value.entries.len());
 
     }
 }

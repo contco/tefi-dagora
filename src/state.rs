@@ -56,6 +56,7 @@ pub struct ThreadIndexes<'a> {
   //Comment State and Indexed Map
   #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
   pub struct Comment {
+      pub comment_id: u64,
       pub comment: String,
       pub author: Addr,
       pub thread_id: u64,
