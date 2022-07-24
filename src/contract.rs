@@ -162,7 +162,7 @@ fn query_threads_by_category(deps: Deps, category: String, offset: Option<u64>, 
     let list: StdResult<Vec<_>>  = threads()
     .idx.category
     .prefix(category)
-    .range(deps.storage, start, None, Order::Ascending)
+    .range(deps.storage, start, None, Order::Descending)
     .take(limit)
     .map(|item| item.map(|(_, t)| t))
     .collect();
@@ -180,7 +180,7 @@ fn query_threads_by_author(deps: Deps, author: Addr, offset: Option<u64>, limit:
     let list: StdResult<Vec<_>>  = threads()
     .idx.author
     .prefix(author)
-    .range(deps.storage, start, None, Order::Ascending)
+    .range(deps.storage, start, None, Order::Descending)
     .take(limit)
     .map(|item| item.map(|(_, t)| t))
     .collect();
@@ -228,7 +228,7 @@ mod tests {
     }
 
     fn create_new_thread(deps: DepsMut) {
-        let info = mock_info("anyone", &coins(2, "token"));
+        let info = mock_info("creator", &coins(2, "token"));
         let title = String::from("First Thread");
         let content = String::from("First Message");
         let category = String::from("General");
@@ -243,10 +243,7 @@ mod tests {
 
     #[test]
     fn create_thread() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let mut deps = instantiate_contract();
         create_new_thread(deps.as_mut());
 
          // We should query thread response using id
@@ -260,18 +257,9 @@ mod tests {
     }
     #[test]
     fn update_thread_content() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-        let info = mock_info("creator", &coins(2, "token"));
-        let title = String::from("First Thread");
-        let content = String::from("First Message");
-        let category = String::from("General");
-        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg);
-
+        let mut deps = instantiate_contract();
+        
+        create_new_thread(deps.as_mut());
 
         let updated_content = String::from("Updated Content!");
 
@@ -361,10 +349,7 @@ mod tests {
 
     #[test]
     fn query_threads_by_category() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let mut deps = instantiate_contract();
 
         let info = mock_info("creator", &coins(2, "token"));
         let title = String::from("First Thread");
@@ -380,7 +365,7 @@ mod tests {
         let value: ThreadsResponse = from_binary(&res).unwrap();
 
         // Verify Thread Vector
-        assert_eq!(1, value.entries[0].id);
+        assert_eq!(2, value.entries[0].id);
         assert_eq!(title, value.entries[0].title);
         assert_eq!(content, value.entries[0].content);
         assert_eq!(category, value.entries[0].category);
@@ -389,10 +374,7 @@ mod tests {
     }
     #[test]
     fn query_threads_by_author() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let mut deps = instantiate_contract();
 
         let info1 = mock_info("creator1", &coins(2, "token"));
         let info2 = mock_info("creator2", &coins(2, "token"));
