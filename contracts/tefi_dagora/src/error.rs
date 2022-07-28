@@ -14,6 +14,8 @@ pub enum ContractError {
     ThreadNotExists {},
     #[error("CommentNotExists")]
     CommentNotExists {},
+    #[error("NotEnoughBalance")]
+    NotEnoughBalance {},
 
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },

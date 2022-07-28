@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Uint128};
 
 use crate::state::{Thread, Comment};
 
@@ -17,6 +17,7 @@ pub enum ExecuteMsg {
     UpdateThreadTitle {id: u64, title: String},
     AddComment {thread_id: u64, comment: String },
     UpdateComment {comment_id: u64, comment: String},
+    Send {address: Addr, amount: Uint128}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

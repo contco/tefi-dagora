@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Order, Addr};
+use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Order, Addr, Uint128, CosmosMsg, BankMsg, Coin};
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
 
@@ -39,7 +39,7 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
@@ -49,6 +49,8 @@ pub fn execute(
         ExecuteMsg::UpdateThreadTitle { id, title } => update_thread_title(deps, info, id, title),
         ExecuteMsg::AddComment { thread_id, comment } => add_comment(deps, info, thread_id, comment),
         ExecuteMsg::UpdateComment { comment_id, comment } => update_comment(deps, info, comment_id, comment),
+        ExecuteMsg::Send { address, amount } => send(deps, env, info, address, amount),
+
     }
 }
 
@@ -160,6 +162,33 @@ pub fn update_comment(deps: DepsMut, info: MessageInfo, comment_id: u64, comment
     )
 }
 
+
+fn send(deps: DepsMut, env: Env, info: MessageInfo, address: Addr, amount: Uint128) -> Result<Response, ContractError> {  
+    
+    let admin_addr = ADMIN.load(deps.storage)?;
+    
+    if info.sender != admin_addr {
+        return Err(ContractError::Unauthorized { });
+    }
+    let balance = deps.querier.query_balance(env.contract.address.clone(), "uluna".to_string())?;
+    
+    if amount > balance.amount {
+        return Err(ContractError::NotEnoughBalance { });
+    }
+    
+    let msg = CosmosMsg::Bank(BankMsg::Send {
+        to_address: address.to_string(),
+        amount: vec![
+            Coin {
+                denom: "uluna".to_string(),
+                amount: amount,
+            },
+        ],
+    });
+
+    Ok(Response::new().add_message(msg))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -245,7 +274,7 @@ fn query_comments_by_thread(deps: Deps, thread_id: u64, offset: Option<u64>, lim
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info, MockQuerier, MockApi};
-    use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage};
+    use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage, Uint128};
 
     fn instantiate_contract() -> OwnedDeps<MemoryStorage, MockApi, MockQuerier> {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
