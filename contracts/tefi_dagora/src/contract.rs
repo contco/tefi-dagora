@@ -157,12 +157,13 @@ const DEFAULT_LIMIT: u32 = 10;
 
 fn query_threads_by_category(deps: Deps, category: String, offset: Option<u64>, limit: Option<u32>) -> StdResult<ThreadsResponse> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = offset.map(|offset| Bound::exclusive(offset.to_be_bytes().to_vec()));
+    let latest_thread_id: u64 = THREAD_COUNTER.may_load(deps.storage)?.unwrap_or_default();
+    let finish = offset.map(|offset| Bound::inclusive((latest_thread_id - offset).to_be_bytes().to_vec()));
    
     let list: StdResult<Vec<_>>  = threads()
     .idx.category
     .prefix(category)
-    .range(deps.storage, start, None, Order::Descending)
+    .range(deps.storage, None, finish, Order::Descending)
     .take(limit)
     .map(|item| item.map(|(_, t)| t))
     .collect();
@@ -175,12 +176,13 @@ fn query_threads_by_category(deps: Deps, category: String, offset: Option<u64>, 
 
 fn query_threads_by_author(deps: Deps, author: Addr, offset: Option<u64>, limit: Option<u32>) -> StdResult<ThreadsResponse> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = offset.map(|offset| Bound::exclusive(offset.to_be_bytes().to_vec()));
+    let latest_thread_id: u64 = THREAD_COUNTER.may_load(deps.storage)?.unwrap_or_default();
+    let finish = offset.map(|offset| Bound::inclusive((latest_thread_id - offset).to_be_bytes().to_vec()));
 
     let list: StdResult<Vec<_>>  = threads()
     .idx.author
     .prefix(author)
-    .range(deps.storage, start, None, Order::Descending)
+    .range(deps.storage, None, finish, Order::Descending)
     .take(limit)
     .map(|item| item.map(|(_, t)| t))
     .collect();
@@ -198,12 +200,13 @@ fn query_comment_by_id(deps: Deps, comment_id: u64) -> StdResult<Comment> {
 
 fn query_comments_by_thread(deps: Deps, thread_id: u64, offset: Option<u64>, limit: Option<u32>) -> StdResult<CommentsResponse> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = offset.map(|offset| Bound::exclusive(offset.to_be_bytes().to_vec()));
+    let latest_comment_id: u64 = COMMENT_COUNTER.may_load(deps.storage)?.unwrap_or_default();
+    let finish = offset.map(|offset| Bound::inclusive((latest_comment_id - offset).to_be_bytes().to_vec()));
 
     let list: StdResult<Vec<_>>  = comments()
     .idx.thread
     .prefix(thread_id.to_be_bytes().to_vec())
-    .range(deps.storage, start, None, Order::Descending)
+    .range(deps.storage, None, finish, Order::Descending)
     .take(limit)
     .map(|item| item.map(|(_, comment)| comment))
     .collect();
@@ -357,19 +360,24 @@ mod tests {
         let category = String::from("General");
         // Create Two Threads
         let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        let _res = execute(deps.as_mut(), mock_env(), info, msg);
+        let mut iterator = 11;
+        while iterator != 0 {
+            let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+            iterator -= 1;
+        }
         
         // Query Threads With Pagination using Category Index
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadsByCategory {category: String::from("General"), offset: Some(0_u64), limit: Some(10_u32)}).unwrap();
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadsByCategory {category: String::from("General"), offset: Some(2_u64), limit: Some(10_u32)}).unwrap();
         let value: ThreadsResponse = from_binary(&res).unwrap();
 
+        println!("{:?}", value.entries);
+
         // Verify Thread Vector
-        assert_eq!(2, value.entries[0].id);
+        assert_eq!(1, value.entries[8].id);
         assert_eq!(title, value.entries[0].title);
         assert_eq!(content, value.entries[0].content);
         assert_eq!(category, value.entries[0].category);
-        assert_eq!(2, value.entries.len());
+        assert_eq!(9, value.entries.len());
 
     }
     #[test]
@@ -385,7 +393,7 @@ mod tests {
         let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
         let _res = execute(deps.as_mut(), mock_env(), info1.clone(), msg.clone());
         let _res = execute(deps.as_mut(), mock_env(), info2.clone(), msg);
-        
+
         // Query Threads With Pagination using Author Index
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadsByAuthor {author: info1.sender.clone(), offset: Some(0_u64), limit: Some(10_u32)}).unwrap();
         let value: ThreadsResponse = from_binary(&res).unwrap();
