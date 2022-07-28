@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::Addr;
 
 use crate::state::{Thread, Comment};
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MigrateMsg {}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {}
 

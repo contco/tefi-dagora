@@ -5,13 +5,18 @@ use cw2::set_contract_version;
 use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
-use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse, CommentsResponse};
+use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse, CommentsResponse, MigrateMsg};
 use crate::state::{ ADMIN, THREAD_COUNTER, Thread, threads, next_thread_counter, COMMENT_COUNTER, Comment, comments, next_comment_counter };
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
+}
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
