@@ -6,7 +6,7 @@ use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
 use crate::msg::{ ExecuteMsg, InstantiateMsg, QueryMsg, GetThreadByIdResponse, ThreadsResponse, CommentsResponse, MigrateMsg};
-use crate::state::{ ADMIN, THREAD_COUNTER, Thread, threads, next_thread_counter, COMMENT_COUNTER, Comment, comments, next_comment_counter };
+use crate::state::{ CONFIG, Config, THREAD_COUNTER, Thread, threads, next_thread_counter, COMMENT_COUNTER, Comment, comments, next_comment_counter };
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tefi_dagora";
@@ -23,9 +23,16 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    ADMIN.save(deps.storage, &info.sender.clone())?;
+
+    let config: Config = Config {
+        thread_fee: msg.thread_fee.unwrap_or_else(|| Uint128::zero()),
+        comment_fee: msg.comment_fee.unwrap_or_else(|| Uint128::zero()),
+        admin_addr: info.sender.clone(),
+    };
+
+    CONFIG.save(deps.storage, &config)?;
     COMMENT_COUNTER.save(deps.storage, &0)?;
     THREAD_COUNTER.save(deps.storage, &0)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -55,7 +62,20 @@ pub fn execute(
 }
 
 pub fn create_thread(deps: DepsMut, info: MessageInfo, title: String, content: String, category: String) ->Result<Response, ContractError> {
-let thread_id = next_thread_counter(deps.storage)?; 
+    let config = CONFIG.load(deps.storage)?;
+    
+    let coin_amount: Uint128 = info
+    .funds
+    .iter()
+    .find(|c| c.denom == "uluna")
+    .map(|c| Uint128::from(c.amount))
+    .unwrap_or_else(Uint128::zero);
+
+    if config.thread_fee > coin_amount {
+        return Err(ContractError::LessFeeAmount {  });
+    }
+
+    let thread_id = next_thread_counter(deps.storage)?; 
     let thread = Thread {
         id: thread_id,
         title,
@@ -117,7 +137,19 @@ pub fn update_thread_title(deps: DepsMut, info: MessageInfo, id: u64, title: Str
     )
 }
 
-pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: String) -> Result<Response, ContractError> {
+pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: String) -> Result<Response, ContractError> {  
+    let config = CONFIG.load(deps.storage)?;
+    
+    let coin_amount: Uint128 = info
+    .funds
+    .iter()
+    .find(|c| c.denom == "uluna")
+    .map(|c| Uint128::from(c.amount))
+    .unwrap_or_else(Uint128::zero);
+
+    if config.comment_fee > coin_amount {
+        return Err(ContractError::LessFeeAmount {  });
+    }
     let load_thread = threads().load(deps.storage, &thread_id.to_be_bytes().to_vec());
     match load_thread {
         Ok(_thread)=> {
@@ -165,9 +197,9 @@ pub fn update_comment(deps: DepsMut, info: MessageInfo, comment_id: u64, comment
 
 fn send(deps: DepsMut, env: Env, info: MessageInfo, address: Addr, amount: Uint128) -> Result<Response, ContractError> {  
     
-    let admin_addr = ADMIN.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
     
-    if info.sender != admin_addr {
+    if info.sender != config.admin_addr {
         return Err(ContractError::Unauthorized { });
     }
     let balance = deps.querier.query_balance(env.contract.address.clone(), "uluna".to_string())?;
@@ -175,7 +207,7 @@ fn send(deps: DepsMut, env: Env, info: MessageInfo, address: Addr, amount: Uint1
     if amount > balance.amount {
         return Err(ContractError::NotEnoughBalance { });
     }
-    
+
     let msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: address.to_string(),
         amount: vec![
@@ -274,18 +306,18 @@ fn query_comments_by_thread(deps: Deps, thread_id: u64, offset: Option<u64>, lim
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info, MockQuerier, MockApi};
-    use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage, Uint128};
+    use cosmwasm_std::{coins, from_binary, OwnedDeps, MemoryStorage};
 
     fn instantiate_contract() -> OwnedDeps<MemoryStorage, MockApi, MockQuerier> {
         let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
-        let msg = InstantiateMsg { };
-        let info = mock_info("creator", &coins(2, "token"));
+        let msg = InstantiateMsg { thread_fee: Option::Some(Uint128::from(10000u128)), comment_fee: Option::Some(Uint128::from(10000u128))};
+        let info = mock_info("creator", &coins(1000000, "token"));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
         return deps;
     }
 
     fn create_new_thread(deps: DepsMut) {
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &coins(10000000, "uluna"));
         let title = String::from("First Thread");
         let content = String::from("First Message");
         let category = String::from("General");
@@ -303,6 +335,18 @@ mod tests {
         let mut deps = instantiate_contract();
         create_new_thread(deps.as_mut());
 
+        //Expect Fee Error
+        let info = mock_info("creator", &coins(0, "uluna"));
+        let title = String::from("First Thread");
+        let content = String::from("First Message");
+        let category = String::from("General");
+        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        
+        match res {
+            Err(ContractError::LessFeeAmount {  } ) => {}
+            _ => panic!("Must return less fee amount error"),
+        }
          // We should query thread response using id
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadById {id: 1}).unwrap();
         let value: GetThreadByIdResponse = from_binary(&res).unwrap();
@@ -375,26 +419,26 @@ mod tests {
     #[test]
     fn add_comment() {
         let mut deps = instantiate_contract();
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &coins(10000, "uluna"));
         let comment = String::from("New Reply");
-        
-        // Add Reply Without Creating Thread
         let msg = ExecuteMsg::AddComment { thread_id: 1, comment: comment.clone()};
-        let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+        // Add Reply Without Creating Thread
+        let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::ThreadNotExists{}) => {}
             _ => panic!("Must return thread not exists error"),
         }
 
-        // Create New Thread
-        let title = String::from("First Thread");
-        let content = String::from("First Message");
-        let category = String::from("General");
-        let msg = ExecuteMsg::CreateThread { title: title.clone(), content: content.clone(), category: category.clone()};
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-     
+        create_new_thread(deps.as_mut());
+
+        // Check Fee Error
+        let fee_info = mock_info("creator", &coins(10, "uluna"));
+        let res = execute(deps.as_mut(), mock_env(), fee_info.clone(), msg.clone());
+        match res {
+            Err(ContractError::LessFeeAmount {  } ) => {}
+            _ => panic!("Must return less fee amount error"),
+        }
         // Add Reply After Creating Thread
-        let msg = ExecuteMsg::AddComment { thread_id: 1, comment};
         let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
 
         // Verify Comment is added
@@ -409,14 +453,14 @@ mod tests {
         let mut deps = instantiate_contract();
         create_new_thread(deps.as_mut());
 
-        let auth_info = mock_info("creator", &coins(2, "token"));
+        let auth_info = mock_info("creator", &coins(10000, "uluna"));
         // Create A Comment
         create_new_comment(deps.as_mut(), auth_info.clone());
 
         let update_comment_msg = ExecuteMsg::UpdateComment { comment_id: 1, comment: String::from("Updated Comment")};
        
         // Update Without Authorized User
-        let un_auth_info = mock_info("anon", &coins(2, "token"));
+        let un_auth_info = mock_info("anon", &coins(10000, "uluna"));
         let res = execute(deps.as_mut(), mock_env(), un_auth_info.clone(), update_comment_msg.clone());
 
         match res {
@@ -438,7 +482,7 @@ mod tests {
     fn query_threads_by_category() {
         let mut deps = instantiate_contract();
 
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &coins(10000, "uluna"));
         let title = String::from("First Thread");
         let content = String::from("First Message");
         let category = String::from("General");
@@ -468,8 +512,8 @@ mod tests {
     fn query_threads_by_author() {
         let mut deps = instantiate_contract();
 
-        let info1 = mock_info("creator1", &coins(2, "token"));
-        let info2 = mock_info("creator2", &coins(2, "token"));
+        let info1 = mock_info("creator1", &coins(10000, "uluna"));
+        let info2 = mock_info("creator2", &coins(10000, "uluna"));
         let title = String::from("First Thread");
         let content = String::from("First Message");
         let category = String::from("General");
@@ -494,8 +538,8 @@ mod tests {
        
         create_new_thread(deps.as_mut());
 
-        let info1 = mock_info("creator1", &coins(2, "token"));
-        let info2 = mock_info("creator2", &coins(2, "token"));
+        let info1 = mock_info("creator1", &coins(10000, "uluna"));
+        let info2 = mock_info("creator2", &coins(10000, "uluna"));
 
         // Create Three Comments for Thread ID 1
         create_new_comment(deps.as_mut(), info1.clone());

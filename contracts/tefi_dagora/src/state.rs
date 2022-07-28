@@ -1,10 +1,17 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, StdResult, Storage};
+use cosmwasm_std::{Addr, StdResult, Storage, Uint128};
 use cw_storage_plus::{Item, MultiIndex, IndexList, Index, IndexedMap};
 
-pub const ADMIN: Item<Addr> = Item::new("ADMIN");
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Config {
+  pub thread_fee: Uint128,
+  pub comment_fee: Uint128,
+  pub admin_addr: Addr,
+}
+
+pub const CONFIG: Item<Config> = Item::new("CONFIG");
 
 // Thread State and Indexed Map
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
