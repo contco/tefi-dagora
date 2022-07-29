@@ -18,6 +18,9 @@ pub enum ContractError {
     NotEnoughBalance {},
     #[error("LessFeeAmount")]
     LessFeeAmount {},
+    #[error("ConfigNotExists")]
+    ConfigNotExists {},
+
 
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },

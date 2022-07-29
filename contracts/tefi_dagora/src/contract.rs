@@ -57,7 +57,7 @@ pub fn execute(
         ExecuteMsg::AddComment { thread_id, comment } => add_comment(deps, info, thread_id, comment),
         ExecuteMsg::UpdateComment { comment_id, comment } => update_comment(deps, info, comment_id, comment),
         ExecuteMsg::Send { address, amount } => send(deps, env, info, address, amount),
-
+        ExecuteMsg::UpdateFees {thread_fee, comment_fee} => update_fees(deps, info, thread_fee, comment_fee)
     }
 }
 
@@ -194,6 +194,27 @@ pub fn update_comment(deps: DepsMut, info: MessageInfo, comment_id: u64, comment
     )
 }
 
+pub fn update_fees(deps: DepsMut, info: MessageInfo, thread_fee: Option<Uint128>, comment_fee: Option<Uint128>) -> Result<Response, ContractError> {  
+
+  let config = CONFIG.update(deps.storage, |mut config| -> Result<_, ContractError> {
+        if info.sender != config.admin_addr {
+            return Err(ContractError::Unauthorized {  });
+         }
+         config.thread_fee = thread_fee.unwrap_or_else(|| config.thread_fee);
+         config.comment_fee = comment_fee.unwrap_or_else(|| config.comment_fee);
+         
+         Ok(config)
+    })?;
+
+    Ok(
+        Response::new()
+        .add_attribute("method", "update_fees")
+        .add_attribute("author", info.sender)
+        .add_attribute("thread_fee", config.thread_fee)
+        .add_attribute("comment_fee", config.comment_fee),
+    )
+}
+
 
 fn send(deps: DepsMut, env: Env, info: MessageInfo, address: Addr, amount: Uint128) -> Result<Response, ContractError> {  
     
@@ -229,6 +250,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetThreadsByAuthor { author, offset, limit } =>  to_binary(&query_threads_by_author(deps, author, offset, limit)?),
         QueryMsg::GetCommentById {id} => to_binary(&query_comment_by_id(deps, id)?),
         QueryMsg::GetCommentsByThread { thread_id, offset, limit } => to_binary(&query_comments_by_thread(deps, thread_id, offset, limit)?),
+        QueryMsg::GetConfig {  } => to_binary(&query_config(deps)?)
     }
 }
 
@@ -300,6 +322,11 @@ fn query_comments_by_thread(deps: Deps, thread_id: u64, offset: Option<u64>, lim
         entries: list?,
     };
     Ok(result)    
+}
+
+fn query_config(deps: Deps) -> StdResult<Config> {
+    let config = CONFIG.load(deps.storage)?;
+    Ok(config)
 }
 
 #[cfg(test)]
@@ -476,6 +503,32 @@ mod tests {
         let value: Comment = from_binary(&res).unwrap();
         assert_eq!(String::from("Updated Comment"), value.comment);
 
+    }
+
+    #[test]
+    fn update_fees() {
+        let mut deps = instantiate_contract();
+
+        let auth_info = mock_info("creator", &coins(10000, "uluna"));
+        let update_fee_msg = ExecuteMsg::UpdateFees { thread_fee: Option::Some(Uint128::from(2_u128)), comment_fee: Option::Some(Uint128::from(2_u128)) };
+       
+        // Update Without Authorized User
+        let un_auth_info = mock_info("anon", &coins(10000, "uluna"));
+        let res = execute(deps.as_mut(), mock_env(), un_auth_info.clone(), update_fee_msg.clone());
+
+        match res {
+            Err(ContractError::Unauthorized {}) => {}
+            _ => panic!("Must return unauthorized error"),
+        }
+
+        // Update With Authorized User
+        let _res = execute(deps.as_mut(), mock_env(), auth_info.clone(), update_fee_msg);
+
+        // Verify Updated Fees
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetConfig {}).unwrap();
+        let value: Config = from_binary(&res).unwrap();
+        assert_eq!(Uint128::from(2_u128), value.thread_fee);
+        assert_eq!(Uint128::from(2_u128), value.comment_fee);
     }
 
     #[test]

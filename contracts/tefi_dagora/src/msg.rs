@@ -20,7 +20,8 @@ pub enum ExecuteMsg {
     UpdateThreadTitle {id: u64, title: String},
     AddComment {thread_id: u64, comment: String },
     UpdateComment {comment_id: u64, comment: String},
-    Send {address: Addr, amount: Uint128}
+    Send {address: Addr, amount: Uint128},
+    UpdateFees {thread_fee: Option<Uint128>, comment_fee: Option<Uint128>}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -30,7 +31,8 @@ pub enum QueryMsg {
     GetThreadsByCategory {category: String, offset: Option<u64>, limit: Option<u32>},
     GetThreadsByAuthor {author: Addr, offset: Option<u64>, limit: Option<u32>},
     GetCommentById {id: u64},
-    GetCommentsByThread {thread_id: u64, offset: Option<u64>, limit: Option<u32>}
+    GetCommentsByThread {thread_id: u64, offset: Option<u64>, limit: Option<u32>},
+    GetConfig {}
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetThreadByIdResponse {
