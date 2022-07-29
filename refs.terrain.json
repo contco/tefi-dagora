@@ -1,9 +1,9 @@
 {
   "testnet": {
     "tefi_dagora": {
-      "codeId": "2355",
+      "codeId": "2552",
       "contractAddresses": {
-        "default": "terra1rptnyysvx94lp6sq9ckwk6cwfetu3e4ar8e0e4nfw3gh32jl0q8sep2aq4"
+        "default": "terra1zrxh62sytlr9fzmeevv2gu7zd2c9jsxeaxsx0ezcl6c4lkh6u59qalvt90"
       }
     }
   }

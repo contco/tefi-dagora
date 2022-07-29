@@ -39,6 +39,13 @@ export interface CommentsResponse {
   entries: Comment[];
   [k: string]: unknown;
 }
+export type Uint128 = string;
+export interface Config {
+  admin_addr: Addr;
+  comment_fee: Uint128;
+  thread_fee: Uint128;
+  [k: string]: unknown;
+}
 export type ExecuteMsg = {
   create_thread: {
     category: string;
@@ -53,6 +60,12 @@ export type ExecuteMsg = {
     [k: string]: unknown;
   };
 } | {
+  update_thread_title: {
+    id: number;
+    title: string;
+    [k: string]: unknown;
+  };
+} | {
   add_comment: {
     comment: string;
     thread_id: number;
@@ -64,8 +77,22 @@ export type ExecuteMsg = {
     comment_id: number;
     [k: string]: unknown;
   };
+} | {
+  send: {
+    address: Addr;
+    amount: Uint128;
+    [k: string]: unknown;
+  };
+} | {
+  update_fees: {
+    comment_fee?: Uint128 | null;
+    thread_fee?: Uint128 | null;
+    [k: string]: unknown;
+  };
 };
 export interface InstantiateMsg {
+  comment_fee?: Uint128 | null;
+  thread_fee?: Uint128 | null;
   [k: string]: unknown;
 }
 export type QueryMsg = {
@@ -97,6 +124,10 @@ export type QueryMsg = {
     limit?: number | null;
     offset?: number | null;
     thread_id: number;
+    [k: string]: unknown;
+  };
+} | {
+  get_config: {
     [k: string]: unknown;
   };
 };
@@ -151,6 +182,7 @@ export interface TefiDagoraReadOnlyInterface {
     offset?: number;
     threadId: number;
   }) => Promise<CommentsResponse>;
+  getConfig: () => Promise<Config>;
 }
 export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
   client: LCDClient;
@@ -164,6 +196,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     this.getThreadsByAuthor = this.getThreadsByAuthor.bind(this);
     this.getCommentById = this.getCommentById.bind(this);
     this.getCommentsByThread = this.getCommentsByThread.bind(this);
+    this.getConfig = this.getConfig.bind(this);
   }
 
   getThreadById = async ({
@@ -239,6 +272,11 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
       }
     });
   };
+  getConfig = async (): Promise<Config> => {
+    return this.client.wasm.contractQuery(this.contractAddress, {
+      get_config: {}
+    });
+  };
 }
 export interface TefiDagoraInterface extends TefiDagoraReadOnlyInterface {
   contractAddress: string;
@@ -258,6 +296,13 @@ export interface TefiDagoraInterface extends TefiDagoraReadOnlyInterface {
     content: string;
     id: number;
   }, funds?: Coins) => Promise<any>;
+  updateThreadTitle: ({
+    id,
+    title
+  }: {
+    id: number;
+    title: string;
+  }, funds?: Coins) => Promise<any>;
   addComment: ({
     comment,
     threadId
@@ -272,6 +317,20 @@ export interface TefiDagoraInterface extends TefiDagoraReadOnlyInterface {
     comment: string;
     commentId: number;
   }, funds?: Coins) => Promise<any>;
+  send: ({
+    address,
+    amount
+  }: {
+    address: string;
+    amount: string;
+  }, funds?: Coins) => Promise<any>;
+  updateFees: ({
+    commentFee,
+    threadFee
+  }: {
+    commentFee?: Uint128;
+    threadFee?: Uint128;
+  }, funds?: Coins) => Promise<any>;
 }
 export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagoraInterface {
   client: LCDClient;
@@ -285,8 +344,11 @@ export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagor
     this.contractAddress = contractAddress;
     this.createThread = this.createThread.bind(this);
     this.updateThreadContent = this.updateThreadContent.bind(this);
+    this.updateThreadTitle = this.updateThreadTitle.bind(this);
     this.addComment = this.addComment.bind(this);
     this.updateComment = this.updateComment.bind(this);
+    this.send = this.send.bind(this);
+    this.updateFees = this.updateFees.bind(this);
   }
 
   createThread = async ({
@@ -346,6 +408,33 @@ export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagor
       return this.client.tx.broadcast(execTx);
     }
   };
+  updateThreadTitle = async ({
+    id,
+    title
+  }: {
+    id: number;
+    title: string;
+  }, funds?: Coins): Promise<WaitTxBroadcastResult | TxInfo | undefined> => {
+    const senderAddress = isConnectedWallet(this.wallet) ? this.wallet.walletAddress : this.wallet.key.accAddress;
+    const execMsg = new MsgExecuteContract(senderAddress, this.contractAddress, {
+      update_thread_title: {
+        id,
+        title
+      }
+    }, funds);
+
+    if (isConnectedWallet(this.wallet)) {
+      const tx = await this.wallet.post({
+        msgs: [execMsg]
+      });
+      return waitForInclusionInBlock(this.client, tx.result.txhash);
+    } else {
+      const execTx = await this.wallet.createAndSignTx({
+        msgs: [execMsg]
+      });
+      return this.client.tx.broadcast(execTx);
+    }
+  };
   addComment = async ({
     comment,
     threadId
@@ -385,6 +474,60 @@ export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagor
       update_comment: {
         comment,
         comment_id: commentId
+      }
+    }, funds);
+
+    if (isConnectedWallet(this.wallet)) {
+      const tx = await this.wallet.post({
+        msgs: [execMsg]
+      });
+      return waitForInclusionInBlock(this.client, tx.result.txhash);
+    } else {
+      const execTx = await this.wallet.createAndSignTx({
+        msgs: [execMsg]
+      });
+      return this.client.tx.broadcast(execTx);
+    }
+  };
+  send = async ({
+    address,
+    amount
+  }: {
+    address: string;
+    amount: string;
+  }, funds?: Coins): Promise<WaitTxBroadcastResult | TxInfo | undefined> => {
+    const senderAddress = isConnectedWallet(this.wallet) ? this.wallet.walletAddress : this.wallet.key.accAddress;
+    const execMsg = new MsgExecuteContract(senderAddress, this.contractAddress, {
+      send: {
+        address,
+        amount
+      }
+    }, funds);
+
+    if (isConnectedWallet(this.wallet)) {
+      const tx = await this.wallet.post({
+        msgs: [execMsg]
+      });
+      return waitForInclusionInBlock(this.client, tx.result.txhash);
+    } else {
+      const execTx = await this.wallet.createAndSignTx({
+        msgs: [execMsg]
+      });
+      return this.client.tx.broadcast(execTx);
+    }
+  };
+  updateFees = async ({
+    commentFee,
+    threadFee
+  }: {
+    commentFee?: Uint128;
+    threadFee?: Uint128;
+  }, funds?: Coins): Promise<WaitTxBroadcastResult | TxInfo | undefined> => {
+    const senderAddress = isConnectedWallet(this.wallet) ? this.wallet.walletAddress : this.wallet.key.accAddress;
+    const execMsg = new MsgExecuteContract(senderAddress, this.contractAddress, {
+      update_fees: {
+        comment_fee: commentFee,
+        thread_fee: threadFee
       }
     }, funds);
 
