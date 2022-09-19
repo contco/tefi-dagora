@@ -54,6 +54,13 @@ export type ExecuteMsg = {
     [k: string]: unknown;
   };
 } | {
+  update_thread: {
+    content: string;
+    id: number;
+    title: string;
+    [k: string]: unknown;
+  };
+} | {
   update_thread_content: {
     content: string;
     id: number;
@@ -149,7 +156,7 @@ export interface TefiDagoraReadOnlyInterface {
     id
   }: {
     id: number;
-  }) => Promise<Thread>;
+  }) => Promise<ThreadByIdResponse>;
   getThreadsByCategory: ({
     category,
     limit,
@@ -158,7 +165,7 @@ export interface TefiDagoraReadOnlyInterface {
     category: string;
     limit?: number;
     offset?: number;
-  }) => Promise<ThreadsResponse>;
+  }) => Promise<ThreadsByCategoryResponse>;
   getThreadsByAuthor: ({
     author,
     limit,
@@ -167,12 +174,12 @@ export interface TefiDagoraReadOnlyInterface {
     author: string;
     limit?: number;
     offset?: number;
-  }) => Promise<ThreadsResponse>;
+  }) => Promise<ThreadsByAuthorResponse>;
   getCommentById: ({
     id
   }: {
     id: number;
-  }) => Promise<Comment>;
+  }) => Promise<CommentByIdResponse>;
   getCommentsByThread: ({
     limit,
     offset,
@@ -181,8 +188,8 @@ export interface TefiDagoraReadOnlyInterface {
     limit?: number;
     offset?: number;
     threadId: number;
-  }) => Promise<CommentsResponse>;
-  getConfig: () => Promise<Config>;
+  }) => Promise<CommentsByThreadResponse>;
+  getConfig: () => Promise<ConfigResponse>;
 }
 export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
   client: LCDClient;
@@ -203,7 +210,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     id
   }: {
     id: number;
-  }): Promise<Thread> => {
+  }): Promise<ThreadByIdResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_thread_by_id: {
         id
@@ -218,7 +225,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     category: string;
     limit?: number;
     offset?: number;
-  }): Promise<ThreadsResponse> => {
+  }): Promise<ThreadsByCategoryResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_threads_by_category: {
         category,
@@ -235,7 +242,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     author: string;
     limit?: number;
     offset?: number;
-  }): Promise<ThreadsResponse> => {
+  }): Promise<ThreadsByAuthorResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_threads_by_author: {
         author,
@@ -248,7 +255,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     id
   }: {
     id: number;
-  }): Promise<Comment> => {
+  }): Promise<CommentByIdResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_comment_by_id: {
         id
@@ -263,7 +270,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
     limit?: number;
     offset?: number;
     threadId: number;
-  }): Promise<CommentsResponse> => {
+  }): Promise<CommentsByThreadResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_comments_by_thread: {
         limit,
@@ -272,7 +279,7 @@ export class TefiDagoraQueryClient implements TefiDagoraReadOnlyInterface {
       }
     });
   };
-  getConfig = async (): Promise<Config> => {
+  getConfig = async (): Promise<ConfigResponse> => {
     return this.client.wasm.contractQuery(this.contractAddress, {
       get_config: {}
     });
@@ -287,6 +294,15 @@ export interface TefiDagoraInterface extends TefiDagoraReadOnlyInterface {
   }: {
     category: string;
     content: string;
+    title: string;
+  }, funds?: Coins) => Promise<any>;
+  updateThread: ({
+    content,
+    id,
+    title
+  }: {
+    content: string;
+    id: number;
     title: string;
   }, funds?: Coins) => Promise<any>;
   updateThreadContent: ({
@@ -343,6 +359,7 @@ export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagor
     this.wallet = wallet;
     this.contractAddress = contractAddress;
     this.createThread = this.createThread.bind(this);
+    this.updateThread = this.updateThread.bind(this);
     this.updateThreadContent = this.updateThreadContent.bind(this);
     this.updateThreadTitle = this.updateThreadTitle.bind(this);
     this.addComment = this.addComment.bind(this);
@@ -365,6 +382,36 @@ export class TefiDagoraClient extends TefiDagoraQueryClient implements TefiDagor
       create_thread: {
         category,
         content,
+        title
+      }
+    }, funds);
+
+    if (isConnectedWallet(this.wallet)) {
+      const tx = await this.wallet.post({
+        msgs: [execMsg]
+      });
+      return waitForInclusionInBlock(this.client, tx.result.txhash);
+    } else {
+      const execTx = await this.wallet.createAndSignTx({
+        msgs: [execMsg]
+      });
+      return this.client.tx.broadcast(execTx);
+    }
+  };
+  updateThread = async ({
+    content,
+    id,
+    title
+  }: {
+    content: string;
+    id: number;
+    title: string;
+  }, funds?: Coins): Promise<WaitTxBroadcastResult | TxInfo | undefined> => {
+    const senderAddress = isConnectedWallet(this.wallet) ? this.wallet.walletAddress : this.wallet.key.accAddress;
+    const execMsg = new MsgExecuteContract(senderAddress, this.contractAddress, {
+      update_thread: {
+        content,
+        id,
         title
       }
     }, funds);
