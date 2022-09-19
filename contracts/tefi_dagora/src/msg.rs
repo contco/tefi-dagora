@@ -16,6 +16,7 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     CreateThread {title: String, content: String, category: String},
+    UpdateThread {id: u64, title: String, content: String},
     UpdateThreadContent {id: u64, content: String},
     UpdateThreadTitle {id: u64, title: String},
     AddComment {thread_id: u64, comment: String },

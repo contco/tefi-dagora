@@ -33,6 +33,36 @@
     {
       "type": "object",
       "required": [
+        "update_thread"
+      ],
+      "properties": {
+        "update_thread": {
+          "type": "object",
+          "required": [
+            "content",
+            "id",
+            "title"
+          ],
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "title": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "update_thread_content"
       ],
       "properties": {

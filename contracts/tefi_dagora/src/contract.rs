@@ -52,6 +52,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::CreateThread {title, content, category} => create_thread(deps, info, title, content, category),
+        ExecuteMsg::UpdateThread { id, title, content } => update_thread(deps, info, id, title, content),
         ExecuteMsg::UpdateThreadContent { id, content } => update_thread_content(deps, info, id, content),
         ExecuteMsg::UpdateThreadTitle { id, title } => update_thread_title(deps, info, id, title),
         ExecuteMsg::AddComment { thread_id, comment } => add_comment(deps, info, thread_id, comment),
@@ -91,6 +92,30 @@ pub fn create_thread(deps: DepsMut, info: MessageInfo, title: String, content: S
         .add_attribute("message", content)
     )
     
+}
+
+pub fn update_thread(deps: DepsMut, info: MessageInfo, id: u64, title: String, content: String) -> Result<Response, ContractError> {
+    threads().update(deps.storage, &id.to_be_bytes(), |old| match old {
+        Some(thread) => {
+            if info.sender != thread.author {
+                return Err(ContractError::Unauthorized { });
+            }
+           let updated_thread = Thread {
+            content: content.clone(),
+            title: title.clone(),
+            ..thread
+           };
+           Ok(updated_thread)
+        } ,
+        None => Err(ContractError::ThreadNotExists {}),
+    })?;
+    Ok(
+        Response::new()
+        .add_attribute("method", "update_thread")
+        .add_attribute("author", info.sender)
+        .add_attribute("title", title)
+        .add_attribute("content", content),
+    )
 }
 
 pub fn update_thread_content(deps: DepsMut, info: MessageInfo, id: u64, content: String) -> Result<Response, ContractError> {
@@ -381,6 +406,38 @@ mod tests {
         assert_eq!(String::from("First Thread"), value.title);
         assert_eq!(String::from("First Message"), value.content);
         assert_eq!(String::from("General"), value.category);
+
+    }
+
+    #[test]
+    fn update_thread() {
+        let mut deps = instantiate_contract();
+        
+        create_new_thread(deps.as_mut());
+
+        let updated_title = String::from("Updated Title");
+        let updated_content = String::from("Updated Content");
+
+        // Should return error if not executed by thread author
+        let info = mock_info("anyone", &coins(2, "token"));
+        let msg = ExecuteMsg::UpdateThread{ id: 1, title: updated_title.clone(), content: updated_content.clone()};
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        
+        match res {
+            Err(ContractError::Unauthorized {}) => {}
+            _ => panic!("Must return unauthorized error"),
+        }
+
+        // Should update content for author
+        let info = mock_info("creator", &coins(2, "token"));
+        let msg = ExecuteMsg::UpdateThread { id: 1, title: updated_title.clone(), content: updated_content.clone()};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg);
+
+         // Verify content is updated
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetThreadById {id: 1}).unwrap();
+        let value: GetThreadByIdResponse = from_binary(&res).unwrap();
+        assert_eq!(updated_title, value.title);
+        assert_eq!(updated_content, value.content);
 
     }
     #[test]
