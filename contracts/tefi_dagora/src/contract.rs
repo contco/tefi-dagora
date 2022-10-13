@@ -90,6 +90,7 @@ pub fn create_thread(deps: DepsMut, info: MessageInfo, title: String, content: S
         .add_attribute("method", "create_thread")
         .add_attribute("author", info.sender)
         .add_attribute("message", content)
+        .add_attribute("thread_id", thread_id.to_string())
     )
     
 }
@@ -191,6 +192,7 @@ pub fn add_comment(deps: DepsMut, info: MessageInfo, thread_id: u64, comment: St
                 .add_attribute("method", "add_comment")
                 .add_attribute("author", info.sender)
                 .add_attribute("comment", comment)
+                .add_attribute("comment_id", comment_id.to_string())
             )
         },
         Err(_e) => Err(ContractError::ThreadNotExists {  }),
